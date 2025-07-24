@@ -1,0 +1,16 @@
+{
+  "name": "book-nft-platform",
+  "version": 2,
+  "builds": [
+    {
+      "src": "package.json",
+      "use": "@vercel/next"
+    }
+  ],
+  "env": {
+    "NEXT_PUBLIC_WEB3AUTH_CLIENT_ID": "@web3auth-client-id",
+    "NEXT_PUBLIC_CHAIN_ID_HEX": "@chain-id-hex", 
+    "NEXT_PUBLIC_TATUM_API_KEY": "@tatum-api-key",
+    "NEXT_PUBLIC_GETBLOCK_RPC_URL": "@getblock-rpc-url"
+  }
+}
