@@ -21,13 +21,15 @@ const BookVerification = () => {
       if (!web3auth.provider) {
         await web3auth.connect();
       }
-      // Try both possible provider locations
-      console.log('web3auth.provider:', web3auth.provider);
-      console.log('web3auth.provider.provider:', web3auth.provider?.provider);
       const eip1193Provider = web3auth.provider?.provider ? web3auth.provider.provider : web3auth.provider;
-      console.log('eip1193Provider:', eip1193Provider);
+      // Check for accounts
+      const accounts = await eip1193Provider.request({ method: "eth_accounts" });
+      console.log('Accounts:', accounts);
+      if (!accounts || accounts.length === 0) {
+        throw new Error("No accounts returned from provider");
+      }
       const ethersProvider = new ethers.providers.Web3Provider(eip1193Provider, "any");
-      const signer = ethersProvider.getSigner();
+      const signer = ethersProvider.getSigner(accounts[0]);
       const address = await signer.getAddress();
       console.log('Connected address:', address);
       setWalletAddress(address);
