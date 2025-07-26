@@ -21,12 +21,23 @@ export const Web3AuthProvider = ({ children }) => {
           chainConfig,
           privateKeyProvider,
         });
-        const openloginAdapter = new OpenloginAdapter();
+        const openloginAdapter = new OpenloginAdapter({
+          adapterSettings: {
+            network: 'testnet', // or 'mainnet' if using mainnet
+            uxMode: 'popup',
+            whiteLabel: {
+              appName: 'Book NFT Platform',
+            },
+          },
+        });
         web3authInstance.configureAdapter(openloginAdapter);
         await web3authInstance.initModal();
         setWeb3auth(web3authInstance);
       } catch (err) {
         console.error('Web3AuthProvider error:', err);
+        if (err && err.stack) {
+          console.error('Stack:', err.stack);
+        }
       }
     };
     init();
