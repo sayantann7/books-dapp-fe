@@ -18,17 +18,17 @@ const BookVerification = () => {
     try {
       setLoading(true);
       if (!web3auth) throw new Error('Web3Auth is not initialized');
-      // Only connect if not already connected
       if (!web3auth.provider) {
         await web3auth.connect();
       }
-      // Debug: log the provider
+      // Try both possible provider locations
       console.log('web3auth.provider:', web3auth.provider);
-      // Use the EIP-1193 provider from web3auth
-      const ethersProvider = new ethers.providers.Web3Provider(web3auth.provider, "any");
+      console.log('web3auth.provider.provider:', web3auth.provider?.provider);
+      const eip1193Provider = web3auth.provider?.provider ? web3auth.provider.provider : web3auth.provider;
+      console.log('eip1193Provider:', eip1193Provider);
+      const ethersProvider = new ethers.providers.Web3Provider(eip1193Provider, "any");
       const signer = ethersProvider.getSigner();
       const address = await signer.getAddress();
-      // Debug: log the address
       console.log('Connected address:', address);
       setWalletAddress(address);
       setIsConnected(true);
