@@ -10,7 +10,7 @@
   },
   "dependencies": {
     "@tanstack/react-query": "^5.83.0",
-    "@web3auth/modal": "^10.0.4",
+    "@web3auth/modal": "8.12.4",
     "@web3auth/openlogin-adapter": "8.12.4",
     "@web3auth/base": "8.12.4",
     "autoprefixer": "^10.4.21",
