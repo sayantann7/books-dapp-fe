@@ -1,96 +1,32 @@
 import React, { useState } from 'react';
 import { ethers } from 'ethers';
-import { PrimeSdk, Web3WalletProvider } from '@etherspot/prime-sdk';
-import { WALLET_ADAPTERS } from '@web3auth/base';
+import { useWeb3Auth } from './Web3AuthProvider';
 import { Oval } from 'react-loader-spinner';
 import toast from 'react-hot-toast';
 import { getContract, checkISBN } from '../utils/contract';
 import { uploadToIPFS } from '../utils/ipfs';
 
-const BookVerification = ({ web3auth }) => {
+const BookVerification = () => {
+  const { web3auth } = useWeb3Auth();
   const [isbn, setIsbn] = useState('');
   const [loading, setLoading] = useState(false);
   const [bookData, setBookData] = useState(null);
   const [isConnected, setIsConnected] = useState(false);
   const [walletAddress, setWalletAddress] = useState('');
-  const [web3authReady, setWeb3authReady] = useState(false);
 
-  // Check Web3Auth ready state
-  React.useEffect(() => {
-    const checkReadyState = async () => {
-      if (web3auth && web3auth.status === 'ready') {
-        // Additional check to ensure adapters are ready
-        try {
-          const adapters = web3auth.walletAdapters;
-          const openloginAdapter = adapters[WALLET_ADAPTERS.OPENLOGIN];
-          if (openloginAdapter && openloginAdapter.status === 'ready') {
-            setWeb3authReady(true);
-            return;
-          }
-        } catch (error) {
-          console.log('Adapter not ready yet:', error);
-        }
-      }
-      setWeb3authReady(false);
-    };
-
-    checkReadyState();
-    
-    // Poll for ready state if not ready
-    const interval = setInterval(checkReadyState, 1000);
-    
-    return () => clearInterval(interval);
-  }, [web3auth]);
-
-  const connectWallet = async (loginProvider, retryCount = 0) => {
+  const connectWallet = async (loginProvider) => {
     try {
       setLoading(true);
-      
-      if (!web3auth) {
-        throw new Error('Web3Auth is not initialized');
+      if (!web3auth) throw new Error('Web3Auth is not initialized');
+      if (!web3auth.provider) {
+        await web3auth.connect();
       }
-
-      // Wait a bit more and retry if not ready
-      if (!web3authReady) {
-        if (retryCount < 3) {
-          console.log(`Web3Auth not ready, retrying... (${retryCount + 1}/3)`);
-          await new Promise(resolve => setTimeout(resolve, 2000));
-          return await connectWallet(loginProvider, retryCount + 1);
-        }
-        throw new Error('Web3Auth is not ready yet. Please refresh the page and try again.');
-      }
-      
-      // Check if already connected
-      if (web3auth.connected) {
-        console.log('Already connected to Web3Auth');
-      } else {
-        // Double-check adapter status before connecting
-        const adapters = web3auth.walletAdapters;
-        const openloginAdapter = adapters[WALLET_ADAPTERS.OPENLOGIN];
-        
-        if (!openloginAdapter || openloginAdapter.status !== 'ready') {
-          throw new Error('OpenLogin adapter is not ready. Please wait and try again.');
-        }
-        
-        // Connect to Web3Auth
-        await web3auth.connectTo(WALLET_ADAPTERS.OPENLOGIN, {
-          loginProvider,
-          mfaLevel: 'none',
-        });
-      }
-
-      const mappedProvider = new Web3WalletProvider(web3auth.provider);
-      await mappedProvider.refresh();
-
-      const etherspotPrimeSdk = new PrimeSdk(mappedProvider, {
-        chainId: parseInt(process.env.NEXT_PUBLIC_CHAIN_ID_HEX)
-      });
-
-      const address = await etherspotPrimeSdk.getCounterFactualAddress();
+      const ethersProvider = new ethers.providers.Web3Provider(web3auth.provider);
+      const signer = ethersProvider.getSigner();
+      const address = await signer.getAddress();
       setWalletAddress(address);
       setIsConnected(true);
-      
-      return { mappedProvider, address };
+      return { ethersProvider, address };
     } catch (error) {
       console.error('Connection error:', error);
       toast.error('Failed to connect wallet');
@@ -104,16 +40,12 @@ const BookVerification = ({ web3auth }) => {
       toast.error('Please enter an ISBN');
       return;
     }
-
     try {
       setLoading(true);
-      
       const provider = new ethers.providers.JsonRpcProvider(process.env.NEXT_PUBLIC_GETBLOCK_RPC_URL);
       const contract = getContract(provider);
-      
       const result = await checkISBN(contract, isbn);
       setBookData(result);
-      
       if (result.exists) {
         toast.success('Book NFT found!');
       } else {
@@ -130,43 +62,37 @@ const BookVerification = ({ web3auth }) => {
   const mintBook = async (loginProvider) => {
     try {
       setLoading(true);
-      
-      let provider;
+      let ethersProvider, address;
       if (!isConnected) {
         const connection = await connectWallet(loginProvider);
         if (!connection) return;
-        provider = connection.mappedProvider;
+        ethersProvider = connection.ethersProvider;
+        address = connection.address;
       } else {
-        provider = new Web3WalletProvider(web3auth.provider);
+        ethersProvider = new ethers.providers.Web3Provider(web3auth.provider);
+        const signer = ethersProvider.getSigner();
+        address = await signer.getAddress();
       }
-
-      const ethersProvider = new ethers.providers.Web3Provider(provider);
       const signer = ethersProvider.getSigner();
       const contract = getContract(signer);
-
       const bookDetails = {
         isbn,
         title: `Book ${isbn}`,
         author: 'Unknown Author'
       };
-
       toast.loading('Uploading metadata to IPFS...');
       const ipfsUri = await uploadToIPFS(bookDetails);
-
       toast.loading('Minting NFT...');
       const tx = await contract.mintBook(
-        walletAddress,
+        address,
         bookDetails.isbn,
         bookDetails.title,
         bookDetails.author,
         ipfsUri
       );
-
       toast.loading('Waiting for confirmation...');
       await tx.wait();
-
       toast.success('Book NFT minted successfully!');
-      
       await verifyISBN();
     } catch (error) {
       console.error('Minting error:', error);
@@ -179,7 +105,6 @@ const BookVerification = ({ web3auth }) => {
   return (
     <div className="max-w-2xl mx-auto p-6">
       <h1 className="text-3xl font-bold mb-8 text-center">Book NFT Verification</h1>
-      
       <div className="mb-8">
         <label className="block text-sm font-medium mb-2">Enter ISBN</label>
         <div className="flex gap-2">
@@ -199,13 +124,11 @@ const BookVerification = ({ web3auth }) => {
           </button>
         </div>
       </div>
-
       {loading && (
         <div className="flex justify-center my-8">
           <Oval height={40} width={40} color="#4F46E5" />
         </div>
       )}
-
       {bookData && !loading && (
         <div className="bg-gray-50 p-6 rounded-lg">
           {bookData.exists ? (
@@ -228,22 +151,19 @@ const BookVerification = ({ web3auth }) => {
                   <div className="flex gap-2">
                     <button
                       onClick={() => mintBook('google')}
-                      disabled={loading || !web3auth || !web3authReady}
+                      disabled={loading || !web3auth}
                       className="px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 disabled:opacity-50"
                     >
-                      {web3authReady ? 'Login with Google' : 'Initializing...'}
+                      Login with Google
                     </button>
                     <button
                       onClick={() => mintBook('github')}
-                      disabled={loading || !web3auth || !web3authReady}
+                      disabled={loading || !web3auth}
                       className="px-4 py-2 bg-gray-800 text-white rounded-lg hover:bg-gray-900 disabled:opacity-50"
                     >
-                      {web3authReady ? 'Login with GitHub' : 'Initializing...'}
+                      Login with GitHub
                     </button>
                   </div>
-                  {web3auth && !web3authReady && (
-                    <p className="text-sm text-gray-500 mt-2">Initializing Web3Auth... Please wait.</p>
-                  )}
                   {!web3auth && (
                     <p className="text-sm text-gray-500 mt-2">Loading Web3Auth...</p>
                   )}
@@ -260,7 +180,6 @@ const BookVerification = ({ web3auth }) => {
           )}
         </div>
       )}
-
       {isConnected && (
         <div className="mt-8 p-4 bg-green-50 rounded-lg">
           <p className="text-sm text-green-800">
