@@ -1,6 +1,7 @@
 import React, { createContext, useContext, useEffect, useState } from 'react';
 import { Web3Auth } from '@web3auth/modal';
 import { OpenloginAdapter } from '@web3auth/openlogin-adapter';
+import { EthereumPrivateKeyProvider } from '@web3auth/ethereum-provider';
 import { getChainConfig } from '../utils/web3auth';
 
 const Web3AuthContext = createContext({ web3auth: null });
@@ -12,9 +13,13 @@ export const Web3AuthProvider = ({ children }) => {
     const init = async () => {
       try {
         const chainConfig = getChainConfig();
+        const privateKeyProvider = new EthereumPrivateKeyProvider({
+          config: { chainConfig }
+        });
         const web3authInstance = new Web3Auth({
           clientId: process.env.NEXT_PUBLIC_WEB3AUTH_CLIENT_ID,
           chainConfig,
+          privateKeyProvider,
         });
         const openloginAdapter = new OpenloginAdapter();
         web3authInstance.configureAdapter(openloginAdapter);
