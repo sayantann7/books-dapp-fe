@@ -1,40 +1,33 @@
 import React, { useState } from 'react';
 import { ethers } from 'ethers';
-import { useWeb3Auth } from './Web3AuthProvider';
+import { usePrivy } from '@privy-io/react-auth';
 import { Oval } from 'react-loader-spinner';
 import toast from 'react-hot-toast';
 import { getContract, checkISBN } from '../utils/contract';
 import { uploadToIPFS } from '../utils/ipfs';
 
 const BookVerification = () => {
-  const { web3auth } = useWeb3Auth();
+  const { authenticated, login, logout, user, ready, wallet } = usePrivy();
   const [isbn, setIsbn] = useState('');
   const [loading, setLoading] = useState(false);
   const [bookData, setBookData] = useState(null);
-  const [isConnected, setIsConnected] = useState(false);
   const [walletAddress, setWalletAddress] = useState('');
 
-  const connectWallet = async (loginProvider) => {
+  const connectWallet = async () => {
     try {
       setLoading(true);
-      if (!web3auth) throw new Error('Web3Auth is not initialized');
-      if (!web3auth.provider) {
-        await web3auth.connect();
+      if (!authenticated) {
+        await login();
+        return;
       }
-      const eip1193Provider = web3auth.provider?.provider ? web3auth.provider.provider : web3auth.provider;
-      // Check for accounts
-      const accounts = await eip1193Provider.request({ method: "eth_accounts" });
-      console.log('Accounts:', accounts);
-      if (!accounts || accounts.length === 0) {
-        throw new Error("No accounts returned from provider");
+      if (!wallet?.address || !wallet?.ethereumProvider) {
+        throw new Error('No wallet connected');
       }
-      const ethersProvider = new ethers.providers.Web3Provider(eip1193Provider, "any");
-      const signer = ethersProvider.getSigner(accounts[0]);
-      const address = await signer.getAddress();
-      console.log('Connected address:', address);
-      setWalletAddress(address);
-      setIsConnected(true);
-      return { ethersProvider, address };
+      setWalletAddress(wallet.address);
+      return {
+        ethersProvider: new ethers.providers.Web3Provider(wallet.ethereumProvider, 'any'),
+        address: wallet.address,
+      };
     } catch (error) {
       console.error('Connection error:', error);
       toast.error('Failed to connect wallet');
@@ -67,32 +60,29 @@ const BookVerification = () => {
     }
   };
 
-  const mintBook = async (loginProvider) => {
+  const mintBook = async () => {
     try {
       setLoading(true);
-      let ethersProvider, address;
-      if (!isConnected) {
-        const connection = await connectWallet(loginProvider);
-        if (!connection) return;
-        ethersProvider = connection.ethersProvider;
-        address = connection.address;
-      } else {
-        ethersProvider = new ethers.providers.Web3Provider(web3auth.provider);
-        const signer = ethersProvider.getSigner();
-        address = await signer.getAddress();
+      if (!authenticated) {
+        await login();
+        return;
       }
+      if (!wallet?.address || !wallet?.ethereumProvider) {
+        throw new Error('No wallet connected');
+      }
+      const ethersProvider = new ethers.providers.Web3Provider(wallet.ethereumProvider, 'any');
       const signer = ethersProvider.getSigner();
       const contract = getContract(signer);
       const bookDetails = {
         isbn,
         title: `Book ${isbn}`,
-        author: 'Unknown Author'
+        author: 'Unknown Author',
       };
       toast.loading('Uploading metadata to IPFS...');
       const ipfsUri = await uploadToIPFS(bookDetails);
       toast.loading('Minting NFT...');
       const tx = await contract.mintBook(
-        address,
+        wallet.address,
         bookDetails.isbn,
         bookDetails.title,
         bookDetails.author,
@@ -153,32 +143,20 @@ const BookVerification = () => {
           ) : (
             <div>
               <p className="text-gray-600 mb-4">This ISBN has not been minted yet.</p>
-              {!isConnected ? (
+              {!authenticated ? (
                 <div>
                   <p className="mb-4">Login to mint this book as an NFT:</p>
-                  <div className="flex gap-2">
-                    <button
-                      onClick={() => mintBook('google')}
-                      disabled={loading || !web3auth}
-                      className="px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 disabled:opacity-50"
-                    >
-                      Login with Google
-                    </button>
-                    <button
-                      onClick={() => mintBook('github')}
-                      disabled={loading || !web3auth}
-                      className="px-4 py-2 bg-gray-800 text-white rounded-lg hover:bg-gray-900 disabled:opacity-50"
-                    >
-                      Login with GitHub
-                    </button>
-                  </div>
-                  {!web3auth && (
-                    <p className="text-sm text-gray-500 mt-2">Loading Web3Auth...</p>
-                  )}
+                  <button
+                    onClick={login}
+                    disabled={loading || !ready}
+                    className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50"
+                  >
+                    Login with Privy
+                  </button>
                 </div>
               ) : (
                 <button
-                  onClick={() => mintBook()}
+                  onClick={mintBook}
                   className="px-6 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700"
                 >
                   Mint NFT
@@ -188,10 +166,11 @@ const BookVerification = () => {
           )}
         </div>
       )}
-      {isConnected && (
+      {authenticated && wallet?.address && (
         <div className="mt-8 p-4 bg-green-50 rounded-lg">
           <p className="text-sm text-green-800">
-            Connected: {walletAddress.slice(0, 6)}...{walletAddress.slice(-4)}
+            Connected: {wallet.address.slice(0, 6)}...{wallet.address.slice(-4)}
+            <button onClick={logout} className="ml-4 px-2 py-1 bg-gray-200 rounded">Logout</button>
           </p>
         </div>
       )}

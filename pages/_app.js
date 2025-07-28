@@ -1,11 +1,11 @@
 import '../styles/globals.css';
-import { Web3AuthProvider } from '../components/Web3AuthProvider';
+import { PrivyProvider } from '@privy-io/react-auth';
 
 function MyApp({ Component, pageProps }) {
   return (
-    <Web3AuthProvider>
+    <PrivyProvider appId={process.env.NEXT_PUBLIC_PRIVY_APP_ID} config={{ loginMethods: ['google', 'email'], appearance: { theme: 'light' } }}>
       <Component {...pageProps} />
-    </Web3AuthProvider>
+    </PrivyProvider>
   );
 }
 
